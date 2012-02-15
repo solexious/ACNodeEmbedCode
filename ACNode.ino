@@ -21,29 +21,49 @@ const int buttonPin = 4;
 const int relayPin = 2;
 const int statusLED[3] = { 
   3, 5, 6 };
+const int RFIDsense = 14;
 
 // Inits
 
 SL018 rfid;
 
 // Global Vars
-byte returnedDBID[7];
-byte readRFID[7];
+byte returnedDBID[8];
+byte readRFID[8];
 
 void setup(){
 
   Wire.begin();
   Serial.begin(9600);
+
+  pinMode(RFIDsense, INPUT);
+  pinMode(statusLED[0], OUTPUT);
+  pinMode(statusLED[1], OUTPUT);
+  pinMode(statusLED[2], OUTPUT);
+  pinMode(relayPin, OUTPUT);
+
+
   rfid.seekTag();
-  byte insertID[7] = { 
-    4, 66, 41, 226, 208, 35, 128  };
+  byte insertID[8] = { 
+    4, 66, 41, 226, 208, 35, 128, 7    };
   eeWrite(0,insertID);
   insertID = { 
-    71,254,62,180,0,0,0  };
-  eeWrite(7,insertID);
+    4, 66, 41, 226, 208, 35, 128, 7    };
+  eeWrite(1*8,insertID);
   insertID = { 
-    255, 255, 255, 255, 255, 255, 255   };
-  eeWrite(7+7,insertID);
+    4, 66, 41, 226, 208, 35, 128, 7    };
+  eeWrite(3*8,insertID);
+
+  for(int y=4; y<99; y++){
+    eeWrite(y*8,insertID);
+  }
+
+  insertID = { 
+    71,254,62,180,0,0,0,4    };
+  eeWrite(792,insertID);
+  insertID = { 
+    255, 255, 255, 255, 255, 255, 255, 255     };
+  eeWrite(100*8,insertID);
 
 }
 
@@ -54,29 +74,45 @@ void loop(){
     if(checkID()){
 
       Serial.println("correct");
+      digitalWrite(statusLED[0], HIGH);
+      digitalWrite(statusLED[1], LOW);
+      digitalWrite(statusLED[2], HIGH);
+      digitalWrite(relayPin, HIGH);
+
 
     }
     else{
 
       Serial.println("no match");
+      digitalWrite(statusLED[0], LOW);
+      digitalWrite(statusLED[1], HIGH);
+      digitalWrite(statusLED[2], HIGH);
+      digitalWrite(relayPin, LOW);
 
     }
-    delay(5000);
+    while(!digitalRead(RFIDsense)){
+    }
+    digitalWrite(statusLED[0], HIGH);
+    digitalWrite(statusLED[1], HIGH);
+    digitalWrite(statusLED[2], LOW);
+    digitalWrite(relayPin, LOW);
   }
 
 }
 
 bool returnDBID(int offset){
 
-  eeRead((offset*7),returnedDBID);
+  eeRead((offset*8),returnedDBID);
 
   bool ffcheck = false;
-  for(int x = 0; x < 7 && !ffcheck; x++){
+  for(int x = 0; x < 8 && !ffcheck; x++){
 
     if(returnedDBID[x]!=255){
       ffcheck = true;
     }
   }
+
+  //Serial.println(offset);
 
   return ffcheck;
 }
@@ -92,7 +128,7 @@ bool checkID(){
     if(returnDBID(x)){
       // ID has been retrived, now check it
       bool matchCheck = true;
-      for(int y = 0; y < 7 && matchCheck; y++){
+      for(int y = 0; y < 8 && matchCheck; y++){
         // Loop through array and check
         if(returnedDBID[y]!=readRFID[y]){
           matchCheck = false;
@@ -115,7 +151,7 @@ bool getRFID(){
 
     // check len and pad if needed
     int IDLen = rfid.getTagLength();
-    for(int x = 0; x<7; x++){
+    for(int x = 0; x<8; x++){
       // Shift across id to global and pad if needed
       if(x<IDLen){
         readRFID[x] = gotRFID[x];
@@ -124,12 +160,15 @@ bool getRFID(){
         readRFID[x] = 0;
       }
     }
+    readRFID[7] = IDLen;
+
     return true;
   }
   else{
     return false;
   }
 }
+
 
 
 
