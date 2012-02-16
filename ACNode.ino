@@ -43,15 +43,19 @@ void setup(){
   pinMode(relayPin, OUTPUT);
 
 
+  setRGB(255,255,0);
+  digitalWrite(relayPin, LOW);
+
+
   rfid.seekTag();
   byte insertID[8] = { 
-    4, 66, 41, 226, 208, 35, 128, 7    };
+    4, 66, 41, 226, 208, 35, 128, 7        };
   eeWrite(0,insertID);
   insertID = { 
-    4, 66, 41, 226, 208, 35, 128, 7    };
+    4, 66, 41, 226, 208, 35, 128, 7        };
   eeWrite(1*8,insertID);
   insertID = { 
-    4, 66, 41, 226, 208, 35, 128, 7    };
+    4, 66, 41, 226, 208, 35, 128, 7        };
   eeWrite(3*8,insertID);
 
   for(int y=4; y<99; y++){
@@ -59,10 +63,10 @@ void setup(){
   }
 
   insertID = { 
-    71,254,62,180,0,0,0,4    };
+    71,254,62,180,0,0,0,4        };
   eeWrite(792,insertID);
   insertID = { 
-    255, 255, 255, 255, 255, 255, 255, 255     };
+    255, 255, 255, 255, 255, 255, 255, 255         };
   eeWrite(100*8,insertID);
 
 }
@@ -74,9 +78,7 @@ void loop(){
     if(checkID()){
 
       Serial.println("correct");
-      digitalWrite(statusLED[0], HIGH);
-      digitalWrite(statusLED[1], LOW);
-      digitalWrite(statusLED[2], HIGH);
+      setRGB(255,0,255);
       digitalWrite(relayPin, HIGH);
 
 
@@ -84,17 +86,13 @@ void loop(){
     else{
 
       Serial.println("no match");
-      digitalWrite(statusLED[0], LOW);
-      digitalWrite(statusLED[1], HIGH);
-      digitalWrite(statusLED[2], HIGH);
+      setRGB(0,255,255);
       digitalWrite(relayPin, LOW);
 
     }
     while(!digitalRead(RFIDsense)){
     }
-    digitalWrite(statusLED[0], HIGH);
-    digitalWrite(statusLED[1], HIGH);
-    digitalWrite(statusLED[2], LOW);
+    setRGB(255,255,0);
     digitalWrite(relayPin, LOW);
   }
 
@@ -170,5 +168,12 @@ bool getRFID(){
 }
 
 
+bool setRGB(int r, int g, int b){
 
+  analogWrite(statusLED[0], r);
+  analogWrite(statusLED[1], g);
+  analogWrite(statusLED[2], b);
 
+  return true;
+
+}
