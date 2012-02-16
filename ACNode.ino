@@ -30,6 +30,7 @@ SL018 rfid;
 // Global Vars
 byte returnedDBID[8];
 byte readRFID[8];
+int toolStatusMethod;
 
 void setup(){
 
@@ -79,7 +80,7 @@ void loop(){
 
       Serial.println("correct");
       setRGB(255,0,255);
-      digitalWrite(relayPin, HIGH);
+      toolStatus(true);
 
 
     }
@@ -87,13 +88,13 @@ void loop(){
 
       Serial.println("no match");
       setRGB(0,255,255);
-      digitalWrite(relayPin, LOW);
+      toolStatus(false);
 
     }
     while(!digitalRead(RFIDsense)){
     }
     setRGB(255,255,0);
-    digitalWrite(relayPin, LOW);
+    toolStatus(false);
   }
 
 }
@@ -176,4 +177,15 @@ bool setRGB(int r, int g, int b){
 
   return true;
 
+}
+
+bool toolStatus(bool stat){
+  
+  if(toolStatusMethod==0){
+    // Use relay
+    digitalWrite(relayPin, stat);
+  }
+  
+  return true;
+  
 }
