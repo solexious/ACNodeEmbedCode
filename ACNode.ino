@@ -10,13 +10,13 @@
 //////////////////////////////////////////////////
 
 // Includes
-
 #include <Wire.h>
 #include "eepromi2c.h"
 #include <SL018.h>
+#include <SPI.h>
+#include <Ethernet.h>
 
 // Pin assignments
-
 const int buttonPin = 4;
 const int relayPin = 2;
 const int statusLED[3] = { 
@@ -24,13 +24,20 @@ const int statusLED[3] = {
 const int RFIDsense = 14;
 
 // Inits
-
 SL018 rfid;
+byte mac[] = {  
+  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress server(173,194,34,88); // Google
+EthernetClient client;
 
 // Global Vars
 byte returnedDBID[8];
 byte readRFID[8];
+byte supervisorRFID[8];
+byte dbsyncRFID[8];
 int toolStatusMethod;
+int nodeID = 0;
+char hostName[] = "babbage";
 
 void setup(){
 
@@ -44,31 +51,18 @@ void setup(){
   pinMode(relayPin, OUTPUT);
 
 
+  setRGB(0,0,255);
+  if (Ethernet.begin(mac) == 0) {
+    Serial.println("Failed to configure Ethernet using DHCP");
+    // no point in carrying on, so do nothing forevermore:
+    for(;;)
+      ;
+  }
   setRGB(255,255,0);
-  digitalWrite(relayPin, LOW);
+  toolStatus(false);
 
 
   rfid.seekTag();
-  byte insertID[8] = { 
-    4, 66, 41, 226, 208, 35, 128, 7        };
-  eeWrite(0,insertID);
-  insertID = { 
-    4, 66, 41, 226, 208, 35, 128, 7        };
-  eeWrite(1*8,insertID);
-  insertID = { 
-    4, 66, 41, 226, 208, 35, 128, 7        };
-  eeWrite(3*8,insertID);
-
-  for(int y=4; y<99; y++){
-    eeWrite(y*8,insertID);
-  }
-
-  insertID = { 
-    71,254,62,180,0,0,0,4        };
-  eeWrite(792,insertID);
-  insertID = { 
-    255, 255, 255, 255, 255, 255, 255, 255         };
-  eeWrite(100*8,insertID);
 
 }
 
@@ -180,12 +174,243 @@ bool setRGB(int r, int g, int b){
 }
 
 bool toolStatus(bool stat){
-  
+
   if(toolStatusMethod==0){
     // Use relay
     digitalWrite(relayPin, stat);
   }
-  
+
   return true;
-  
+
 }
+
+bool networkCheckCard(){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("GET /");
+    client.print(nodeID);
+    client.print("/card/");
+
+    char msg[2];
+    for(int x;x<readRFID[7];x++){
+      sprintf(msg, "%02x", readRFID[x]);
+      client.print(msg);
+    }
+
+    client.println(" HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Accept: text/plain");
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkAddCard(){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("POST /");
+    client.print(nodeID);
+    client.print("/card/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Content-Type: text/plain");
+
+    char msg[2];
+    for(int x;x<readRFID[7];x++){
+      sprintf(msg, "%02x", readRFID[x]);
+      client.print(msg);
+    }
+
+    client.print(",");
+
+    for(int x;x<supervisorRFID[7];x++){
+      sprintf(msg, "%02x", supervisorRFID[x]);
+      client.print(msg);
+    }
+
+    client.println();
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkSyncDB(byte syncID[8]){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("GET /");
+    client.print(nodeID);
+    client.print("/sync/");
+
+    if(syncID[7]!=0){
+      char msg[2];
+      for(int x;x<readRFID[7];x++){
+        sprintf(msg, "%02x", readRFID[x]);
+        client.print(msg);
+      }
+    }
+
+    client.println(" HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Accept: text/plain");
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkReportToolStatus(bool stat){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("PUT /");
+    client.print(nodeID);
+    client.print("/status/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Content-Type: text/plain");
+
+    client.println((int)stat);
+
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkCheckToolStatus(){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    char msg[2];
+    client.print("GET /");
+    client.print(nodeID);
+    client.print("/status/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Accept: text/plain");
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkReportToolUse(bool stat){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("PUT /");
+    client.print(nodeID);
+    client.print("/tooluse/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Content-Type: text/plain");
+
+    client.print((int)stat);
+    client.print(",");
+
+    char msg[2];
+    for(int x;x<readRFID[7];x++){
+      sprintf(msg, "%02x", readRFID[x]);
+      client.print(msg);
+    }
+
+    client.println();
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkReportToolTime(long timeUsed){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("POST /");
+    client.print(nodeID);
+    client.print("/tooluse/time/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Content-Type: text/plain");
+
+    client.print(timeUsed);
+    client.print(",");
+
+    char msg[2];
+    for(int x;x<readRFID[7];x++){
+      sprintf(msg, "%02x", readRFID[x]);
+      client.print(msg);
+    }
+
+    client.println();
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
+bool networkCaseAlert(bool stat){
+
+  // Check readRFID with the server
+  if (client.connect(server, 80)) {
+    // Make a HTTP request:
+    client.print("PUT /");
+    client.print(nodeID);
+    client.print("/case/ HTTP/1.0");
+    client.print("Host: ");
+    client.println(hostName);
+    client.println("Content-Type: text/plain");
+
+    client.println((int)stat);
+
+    client.println();
+
+    // ADD RESPONCE HANDLING HERE
+
+  }
+  else{
+    return false;
+  }
+} 
+
