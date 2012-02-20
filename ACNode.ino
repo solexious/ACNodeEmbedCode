@@ -223,7 +223,10 @@ bool networkAddCard(){
     client.print("/card/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.print("Content-Length: ");
+    client.println((int)((readRFID[7]*2)+(supervisorRFID[7]*2)+1));
     client.println("Content-Type: text/plain");
+    client.println();
 
     char msg[2];
     for(int x;x<readRFID[7];x++){
@@ -290,7 +293,9 @@ bool networkReportToolStatus(bool stat){
     client.print("/status/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
+    client.println();
 
     client.println((int)stat);
 
@@ -336,7 +341,10 @@ bool networkReportToolUse(bool stat){
     client.print("/tooluse/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.print("Content-Length: ");
+    client.println((int)((readRFID[7]*2)+2));
     client.println("Content-Type: text/plain");
+    client.println();
 
     client.print((int)stat);
     client.print(",");
@@ -368,7 +376,10 @@ bool networkReportToolTime(long timeUsed){
     client.print("/tooluse/time/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.print("Content-Length: ");
+    client.println((int)(getLength(timeUsed)+1+(readRFID[7]*2)));
     client.println("Content-Type: text/plain");
+    client.println();
 
     client.print(timeUsed);
     client.print(",");
@@ -400,7 +411,9 @@ bool networkCaseAlert(bool stat){
     client.print("/case/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
+    client.println();
 
     client.println((int)stat);
 
@@ -413,4 +426,19 @@ bool networkCaseAlert(bool stat){
     return false;
   }
 } 
+
+int getLength(long someValue) {
+  // there's at least one byte:
+  int digits = 1;
+  // continually divide the value by ten, 
+  // adding one to the digit count for each
+  // time you divide, until you're at 0:
+  int dividend = someValue /10;
+  while (dividend > 0) {
+    dividend = dividend /10;
+    digits++;
+  }
+  // return the number of digits:
+  return digits;
+}
 
