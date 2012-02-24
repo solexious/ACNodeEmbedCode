@@ -61,6 +61,8 @@ int nodeID = 1;
 char hostName[] = "";
 bool toolStatusSetting = true;
 
+long previousMillis2 = 0;
+
 void setup(){
 
   Wire.begin();
@@ -71,10 +73,12 @@ void setup(){
   pinMode(statusLED[1], OUTPUT);
   pinMode(statusLED[2], OUTPUT);
   pinMode(relayPin, OUTPUT);
-  
-  byte mooID[] = {4,48,121,34,228,34,128,7};
-  byte blankmooID[] = {255,255,255,255,255,255,255,255};
-  
+
+  byte mooID[] = {
+    4,48,121,34,228,34,128,7  };
+  byte blankmooID[] = {
+    255,255,255,255,255,255,255,255  };
+
   eeWrite(8,mooID);
   eeWrite(0,blankmooID);
 
@@ -85,7 +89,15 @@ void setup(){
     for(;;)
       ;
   }
-  setRGB(255,255,0);
+
+  toolStatusSetting = networkCheckToolStatus();
+
+  if(toolStatusSetting){
+    setRGB(255,255,0);
+  }
+  else{
+    setRGB(0,255,255);
+  }
   toolOperation(false);
 
 
@@ -124,7 +136,8 @@ bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
     // If IDcheck is false x is the last location in the db, else have found a empty spot in the db
     if(!IDcheck){
       location -= 1;
-      byte endID[] = { 225, 225, 255, 255, 255, 255, 255, 255 };
+      byte endID[] = { 
+        225, 225, 255, 255, 255, 255, 255, 255       };
       eeWrite(((location+1)*8),addID);
     }
   }
@@ -136,7 +149,7 @@ void loop(){
   if(getRFID()){ // Read a card at the acnode
     // Set led to "thinking"
     setRGB(0,0,255);
-    
+
     if(checkID()){ // Card is in the database
       bool clearToUse = true;
       if(!toolStatusSetting){ // Tool out of service, check if supervisor
@@ -158,6 +171,8 @@ void loop(){
       else{ // Not ok to use, disable
         setRGB(0,255,255);
         toolOperation(false);
+        while(!digitalRead(RFIDsense)){
+        } 
       }
     }
     else{ // Card not in DB, check with the network
@@ -180,8 +195,8 @@ void loop(){
           }
         }
         /*setRGB(0,0,0);
-        while(!digitalRead(RFIDsense)){
-        }*/
+         while(!digitalRead(RFIDsense)){
+         }*/
       }
       else{ // Card not found on network, solid red led untill card removed
         setRGB(0,255,255);
@@ -197,28 +212,19 @@ void loop(){
   else{
     setRGB(0,255,255);
   }
+
+  // Check tool status
+  long currentMillis2 = millis();
+  if(currentMillis2 - previousMillis2 > 60000) {
+    previousMillis2 = currentMillis2;
+    toolStatusSetting = networkCheckToolStatus();
+  }
+
 }
 
 bool returnDBID(int offset){
 
   eeRead((offset*8),returnedDBID);
-  
-  Serial.print((int)returnedDBID[0]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[1]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[2]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[3]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[4]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[5]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[6]);
-  Serial.print(",");
-  Serial.print((int)returnedDBID[7]);
-  Serial.println();
 
   bool ffcheck = false;
   for(int x = 0; x < 8 && !ffcheck; x++){
@@ -780,6 +786,7 @@ int getLength(long someValue) {
   // return the number of digits:
   return digits;
 }
+
 
 
 
