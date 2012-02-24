@@ -13,7 +13,7 @@ Wire.write((int)(ee & 0xFF)); // LSB
 for (i = 0; i < sizeof(value); i++)
 Wire.write(*p++);
 Wire.endTransmission();
-delay(5);
+delay(10);
 return i;
 }
 

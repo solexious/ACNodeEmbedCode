@@ -55,9 +55,11 @@ byte returnedDBID[8];
 byte readRFID[8];
 byte supervisorRFID[8];
 byte dbsyncRFID[8];
+byte cardToAddID[8];
 int toolStatusMethod;
 int nodeID = 1;
 char hostName[] = "";
+bool toolStatusSetting = true;
 
 void setup(){
 
@@ -69,7 +71,12 @@ void setup(){
   pinMode(statusLED[1], OUTPUT);
   pinMode(statusLED[2], OUTPUT);
   pinMode(relayPin, OUTPUT);
-
+  
+  byte mooID[] = {4,48,121,34,228,34,128,7};
+  byte blankmooID[] = {255,255,255,255,255,255,255,255};
+  
+  eeWrite(8,mooID);
+  eeWrite(0,blankmooID);
 
   setRGB(0,0,255);
   if (Ethernet.begin(mac) == 0) {
@@ -79,14 +86,14 @@ void setup(){
       ;
   }
   setRGB(255,255,0);
-  toolStatus(false);
+  toolOperation(false);
 
 
   rfid.seekTag();
 
 }
 
-bool addCardToDB(bool autoSet, byte cardID[8], long location = 0){
+bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
 
   if(autoSet){
 
@@ -111,53 +118,107 @@ bool addCardToDB(bool autoSet, byte cardID[8], long location = 0){
         IDcheck = false;
       }
     }
-    
+
     location = x;
-    
+
     // If IDcheck is false x is the last location in the db, else have found a empty spot in the db
     if(!IDcheck){
-      byte endID[] = { 225, 225, 255, 255, 255, 255, 255, 255};
-      eeRead(((location+1)*8),endID);
+      location -= 1;
+      byte endID[] = { 225, 225, 255, 255, 255, 255, 255, 255 };
+      eeWrite(((location+1)*8),addID);
     }
   }
-  eeRead((location*8),cardID);
-
+  eeWrite((location*8),addID);
 }
 
 void loop(){
 
-  /*if(getRFID()){
-
-    if(checkID()){
-
-      Serial.println("correct");
-      setRGB(255,0,255);
-      toolStatus(true);
-
-
+  if(getRFID()){ // Read a card at the acnode
+    // Set led to "thinking"
+    setRGB(0,0,255);
+    
+    if(checkID()){ // Card is in the database
+      bool clearToUse = true;
+      if(!toolStatusSetting){ // Tool out of service, check if supervisor
+        if(networkCheckCard()!=2){ // Is not a supervisor
+          clearToUse = false;
+        }
+      }
+      if(clearToUse){ // Ok to use the device, turn on and log
+        setRGB(255,0,255);
+        toolOperation(true);
+        networkReportToolUse(true);
+        long useTimeStart = millis();
+        while(!digitalRead(RFIDsense)){ // Wait for card to be removed
+        }
+        toolOperation(false);
+        networkReportToolUse(false);
+        //networkReportToolTime(millis()-useTimeStart);
+      }
+      else{ // Not ok to use, disable
+        setRGB(0,255,255);
+        toolOperation(false);
+      }
     }
-    else{
-
-      Serial.println("no match");
-      setRGB(0,255,255);
-      toolStatus(false);
-
+    else{ // Card not in DB, check with the network
+      if(networkCheckCard()){ // Card found add to db
+        addCardToDB(true, readRFID);
+        toolOperation(false);
+        long previousMillis = 0;
+        int ledState = LOW;
+        while(!digitalRead(RFIDsense)){ // Flash led green and wait for card to be removed for revalidation
+          unsigned long currentMillis = millis();
+          if(currentMillis - previousMillis > 200) {
+            previousMillis = currentMillis;
+            ledState = !ledState;
+            if (ledState == LOW){
+              setRGB(255,255,255);
+            }
+            else{
+              setRGB(255,0,255);
+            }
+          }
+        }
+        /*setRGB(0,0,0);
+        while(!digitalRead(RFIDsense)){
+        }*/
+      }
+      else{ // Card not found on network, solid red led untill card removed
+        setRGB(0,255,255);
+        toolOperation(false);
+        while(!digitalRead(RFIDsense)){
+        }
+      }
     }
-    while(!digitalRead(RFIDsense)){
-    }
+  }
+  if(toolStatusSetting){
     setRGB(255,255,0);
-    toolStatus(false);
-  }*/
-  
-  byte testID[] = {1,2,3,4,5,6,7,8};
-  
-  addCardToDB(true, testID, 1);
-  
+  }
+  else{
+    setRGB(0,255,255);
+  }
 }
 
 bool returnDBID(int offset){
 
   eeRead((offset*8),returnedDBID);
+  
+  Serial.print((int)returnedDBID[0]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[1]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[2]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[3]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[4]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[5]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[6]);
+  Serial.print(",");
+  Serial.print((int)returnedDBID[7]);
+  Serial.println();
 
   bool ffcheck = false;
   for(int x = 0; x < 8 && !ffcheck; x++){
@@ -235,7 +296,7 @@ bool setRGB(int r, int g, int b){
 
 }
 
-bool toolStatus(bool stat){
+bool toolOperation(bool stat){
 
   if(toolStatusMethod==0){
     // Use relay
@@ -281,7 +342,7 @@ int networkCheckCard(){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     Serial.println(httpResponce);
 
@@ -351,7 +412,7 @@ bool networkAddCard(){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -407,7 +468,7 @@ bool networkSyncDB(byte syncID[8]){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     // TODO
     char* r1 = httpResponce;
@@ -459,7 +520,7 @@ bool networkReportToolStatus(bool stat){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -506,7 +567,7 @@ bool networkCheckToolStatus(){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -570,7 +631,7 @@ bool networkReportToolUse(bool stat){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -630,7 +691,7 @@ bool networkReportToolTime(long timeUsed){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -682,7 +743,7 @@ bool networkCaseAlert(bool stat){
       y++;
     }
     client.stop();
-    httpResponce[y+1] = 0;
+    httpResponce[y] = 0;
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -719,6 +780,10 @@ int getLength(long someValue) {
   // return the number of digits:
   return digits;
 }
+
+
+
+
 
 
 
