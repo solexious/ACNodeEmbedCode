@@ -75,9 +75,9 @@ void setup(){
   pinMode(relayPin, OUTPUT);
 
   byte mooID[] = {
-    4,48,121,34,228,34,128,7  };
+    4,48,121,34,228,34,128,7    };
   byte blankmooID[] = {
-    255,255,255,255,255,255,255,255  };
+    255,255,255,255,255,255,255,255    };
 
   eeWrite(8,mooID);
   eeWrite(0,blankmooID);
@@ -137,7 +137,7 @@ bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
     if(!IDcheck){
       location -= 1;
       byte endID[] = { 
-        225, 225, 255, 255, 255, 255, 255, 255       };
+        225, 225, 255, 255, 255, 255, 255, 255             };
       eeWrite(((location+1)*8),addID);
     }
   }
@@ -387,6 +387,7 @@ bool networkAddCard(){
     client.println("/card/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Accept: text/plain");
     client.print("Content-Length: ");
     client.println((int)((readRFID[7]*2)+(supervisorRFID[7]*2)+1));
     client.println("Content-Type: text/plain");
@@ -394,14 +395,14 @@ bool networkAddCard(){
 
     char msg[2];
     for(int x;x<readRFID[7];x++){
-      sprintf(msg, "%02x", readRFID[x]);
+      sprintf(msg, "%02X", readRFID[x]);
       client.print(msg);
     }
 
     client.print(",");
 
     for(int x;x<supervisorRFID[7];x++){
-      sprintf(msg, "%02x", supervisorRFID[x]);
+      sprintf(msg, "%02X", supervisorRFID[x]);
       client.print(msg);
     }
 
@@ -453,7 +454,7 @@ bool networkSyncDB(byte syncID[8]){
     if(syncID[7]!=0){
       char msg[2];
       for(int x;x<readRFID[7];x++){
-        sprintf(msg, "%02x", readRFID[x]);
+        sprintf(msg, "%02X", readRFID[x]);
         client.print(msg);
       }
     }
@@ -508,6 +509,7 @@ bool networkReportToolStatus(bool stat){
     client.println("/status/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Accept: text/plain");
     client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
     client.println();
@@ -607,22 +609,23 @@ bool networkReportToolUse(bool stat){
     client.println("/tooluse/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Accept: text/plain");
     client.print("Content-Length: ");
-    //client.println((int)((readRFID[7]*2)+2));
-    client.println("1");
+    client.println((int)((readRFID[7]*2)+2));
+    //client.println("1");
     client.println("Content-Type: text/plain");
     client.println();
 
     client.print((int)stat);
-    /*client.print(",");
-     
-     char msg[2];
-     for(int x;x<readRFID[7];x++){
-     sprintf(msg, "%02x", readRFID[x]);
-     client.print(msg);
-     Serial.print(msg);
-     }
-     Serial.println();*/
+    client.print(",");
+
+    char msg[2];
+    for(int x;x<readRFID[7];x++){
+      sprintf(msg, "%02X", readRFID[x]);
+      client.print(msg);
+      Serial.print(msg);
+    }
+    Serial.println();
 
     client.println();
     client.println();
@@ -638,6 +641,8 @@ bool networkReportToolUse(bool stat){
     }
     client.stop();
     httpResponce[y] = 0;
+    
+    Serial.println(httpResponce);
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
@@ -670,6 +675,7 @@ bool networkReportToolTime(long timeUsed){
     client.println("/tooluse/time/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Accept: text/plain");
     client.print("Content-Length: ");
     client.println((int)(getLength(timeUsed)+1+(readRFID[7]*2)));
     client.println("Content-Type: text/plain");
@@ -680,7 +686,7 @@ bool networkReportToolTime(long timeUsed){
 
     char msg[2];
     for(int x;x<readRFID[7];x++){
-      sprintf(msg, "%02x", readRFID[x]);
+      sprintf(msg, "%02X", readRFID[x]);
       client.print(msg);
     }
 
@@ -730,6 +736,7 @@ bool networkCaseAlert(bool stat){
     client.println("/case/ HTTP/1.0");
     client.print("Host: ");
     client.println(hostName);
+    client.println("Accept: text/plain");
     client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
     client.println();
@@ -786,6 +793,7 @@ int getLength(long someValue) {
   // return the number of digits:
   return digits;
 }
+
 
 
 
