@@ -35,6 +35,7 @@
 #include <SL018.h>
 #include <SPI.h>
 #include <Ethernet.h>
+#include <EEPROM.h>
 
 // Pin assignments
 const int buttonPin = 4;
@@ -60,6 +61,7 @@ int toolStatusMethod;
 int nodeID = 1;
 char hostName[] = "";
 bool toolStatusSetting = true;
+bool networkStatus = true;
 
 long previousMillis2 = 0;
 
@@ -74,10 +76,12 @@ void setup(){
   pinMode(statusLED[2], OUTPUT);
   pinMode(relayPin, OUTPUT);
 
+  toolStatusSetting = EEPROM.read(100);
+
   byte mooID[] = {
-    4,48,121,34,228,34,128,7    };
+    4,48,121,34,228,34,128,7      };
   byte blankmooID[] = {
-    255,255,255,255,255,255,255,255    };
+    255,255,255,255,255,255,255,255      };
 
   eeWrite(8,mooID);
   eeWrite(0,blankmooID);
@@ -90,7 +94,11 @@ void setup(){
       ;
   }
 
-  toolStatusSetting = networkCheckToolStatus();
+  bool toolStatusSettingNetwork = networkCheckToolStatus();
+  if((networkStatus)&&(toolStatusSetting!=toolStatusSettingNetwork)){
+    toolStatusSetting = toolStatusSettingNetwork;
+    EEPROM.write(100, toolStatusSetting);
+  }
 
   if(toolStatusSetting){
     setRGB(255,255,0);
@@ -137,7 +145,7 @@ bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
     if(!IDcheck){
       location -= 1;
       byte endID[] = { 
-        225, 225, 255, 255, 255, 255, 255, 255             };
+        225, 225, 255, 255, 255, 255, 255, 255                   };
       eeWrite(((location+1)*8),addID);
     }
   }
@@ -207,7 +215,12 @@ void loop(){
     }
   }
   if(toolStatusSetting){
-    setRGB(255,255,0);
+    if(networkStatus){
+      setRGB(255,255,0);
+    }
+    else{
+      setRGB(0,0,255);
+    }
   }
   else{
     setRGB(0,255,255);
@@ -217,7 +230,11 @@ void loop(){
   long currentMillis2 = millis();
   if(currentMillis2 - previousMillis2 > 60000) {
     previousMillis2 = currentMillis2;
-    toolStatusSetting = networkCheckToolStatus();
+    bool toolStatusSettingNetwork = networkCheckToolStatus();
+    if((networkStatus)&&(toolStatusSetting!=toolStatusSettingNetwork)){
+      toolStatusSetting = toolStatusSettingNetwork;
+      EEPROM.write(100, toolStatusSetting);
+    }
   }
 
 }
@@ -356,6 +373,7 @@ int networkCheckCard(){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "1")){
         return 1;
       }
@@ -367,12 +385,14 @@ int networkCheckCard(){
       }
     }
     else{
+      networkStatus = false;
       return 0;
     }
 
 
   }
   else{
+    networkStatus = false;
     return 0;
   }
 } 
@@ -425,6 +445,7 @@ bool networkAddCard(){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "OK")){
         return true;
       }
@@ -433,11 +454,13 @@ bool networkAddCard(){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -482,6 +505,7 @@ bool networkSyncDB(byte syncID[8]){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "END")){
         return false;
       }
@@ -491,10 +515,12 @@ bool networkSyncDB(byte syncID[8]){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -534,6 +560,7 @@ bool networkReportToolStatus(bool stat){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "OK")){
         return true;
       }
@@ -542,11 +569,13 @@ bool networkReportToolStatus(bool stat){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -581,6 +610,7 @@ bool networkCheckToolStatus(){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "1")){
         return true;
       }
@@ -589,12 +619,13 @@ bool networkCheckToolStatus(){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
-    Serial.println("Can't connect");
+    networkStatus = false;
     return false;
   }
 } 
@@ -641,13 +672,14 @@ bool networkReportToolUse(bool stat){
     }
     client.stop();
     httpResponce[y] = 0;
-    
+
     Serial.println(httpResponce);
 
     char* r1 = httpResponce;
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "OK")){
         return true;
       }
@@ -656,11 +688,13 @@ bool networkReportToolUse(bool stat){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -709,6 +743,7 @@ bool networkReportToolTime(long timeUsed){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "OK")){
         return true;
       }
@@ -717,11 +752,13 @@ bool networkReportToolTime(long timeUsed){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -762,6 +799,7 @@ bool networkCaseAlert(bool stat){
     char* r2 = strstr(r1, "HTTP/1.0 200 OK");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      networkStatus = true;
       if(strstr(r3, "OK")){
         return true;
       }
@@ -770,11 +808,13 @@ bool networkCaseAlert(bool stat){
       }
     }
     else{
+      networkStatus = false;
       return false;
     }
 
   }
   else{
+    networkStatus = false;
     return false;
   }
 } 
@@ -793,6 +833,7 @@ int getLength(long someValue) {
   // return the number of digits:
   return digits;
 }
+
 
 
 
