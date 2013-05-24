@@ -181,6 +181,11 @@ void loop(){
       updateNetworkToolStatus();
     }
     
+    // If we still seem to have a connection to the server, refresh the card status
+    if(networkStatus){
+      refreshNetworkCardDetails();
+    }
+    
 
     if(checkID()){ // Card is in the database
       bool clearToUse = true;
@@ -241,6 +246,21 @@ void loop(){
     updateNetworkToolStatus();
   }
 
+}
+
+void refreshNetworkCardDetails(){
+  
+  if(networkCheckCard()){ // Card found add to db
+    if(!checkID()){
+      addCardToDB(true, readRFID);
+      toolOperation(false);
+      long previousMillis = 0;
+      int ledState = LOW;
+    }
+  }
+  else{ // Card not found on network, solid red led untill card removed
+    // Remove from db
+  }
 }
 
 void updateNetworkToolStatus(){
