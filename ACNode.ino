@@ -175,6 +175,12 @@ void loop(){
   if(getRFID()){ // Read a card at the acnode
     // Set led to "thinking"
     setRGB(0,0,255);
+    
+    // If we seem to have a connection to the server, refresh tool status
+    if(networkStatus){
+      updateNetworkToolStatus();
+    }
+    
 
     if(checkID()){ // Card is in the database
       bool clearToUse = true;
@@ -232,13 +238,18 @@ void loop(){
   long currentMillis2 = millis();
   if(currentMillis2 - previousMillis2 > 60000) {
     previousMillis2 = currentMillis2;
-    bool toolStatusSettingNetwork = networkCheckToolStatus();
-    if((networkStatus)&&(toolStatusSetting!=toolStatusSettingNetwork)){
-      toolStatusSetting = toolStatusSettingNetwork;
-      EEPROM.write(100, toolStatusSetting);
-    }
+    updateNetworkToolStatus();
   }
 
+}
+
+void updateNetworkToolStatus(){
+  
+  bool toolStatusSettingNetwork = networkCheckToolStatus();
+  if((networkStatus)&&(toolStatusSetting!=toolStatusSettingNetwork)){
+    toolStatusSetting = toolStatusSettingNetwork;
+    EEPROM.write(100, toolStatusSetting);
+  }
 }
 
 bool returnDBID(int offset){
