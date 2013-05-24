@@ -7,25 +7,6 @@
 // Change Log:                                  //
 //   v0.1 Initial code                          //
 //                                              //
-//////////////////////////////////////////////////
-//                                              //
-// Working functions:                           //
-// networkCheckCard() - no supervisors          //
-// networkAddCard()                             //
-// networkReportToolStatus()                    //
-// networkCheckToolStatus()                     //
-// networkReportToolUse() - no ID passed        //
-// networkCaseAlert()                           //
-//                                              //
-// Non-working functions:                       //
-// networkSyncDB() - get ID from message body   //
-// networkReportToolTime() - needs server side  //
-//                                              //
-// Functions to write:                          //
-// syncDB() - use addCardToDB to force resync   //
-//                                              //
-// Functions to test:                           //
-// addCardToDB() - add card to location provided//
 //                                              //
 //////////////////////////////////////////////////
 
@@ -47,8 +28,9 @@ const int RFIDsense = 14;
 // Inits
 SL018 rfid;
 byte mac[] = {  
-  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress server(192,168,5,93); // Google
+  0xDE, 0xFF, 0xBE, 0xEF, 0xFE, 0xFF };
+IPAddress server(172,31,24,5);
+int serverPort = 1234;
 EthernetClient client;
 
 // Global Vars
@@ -59,7 +41,7 @@ byte dbsyncRFID[8];
 byte cardToAddID[8];
 int toolStatusMethod;
 int nodeID = 1;
-char hostName[] = "";
+char acHostName[] = "acnodeserver";
 bool toolStatusSetting = true;
 bool networkStatus = true;
 
@@ -78,13 +60,38 @@ void setup(){
 
   toolStatusSetting = EEPROM.read(100);
 
-  byte mooID[] = {
-    4,48,121,34,228,34,128,7      };
-  byte blankmooID[] = {
-    255,255,255,255,255,255,255,255      };
+  byte mooID[8] = {
+    4,71,30,234,242,44,1,7  };
+  byte blankmooID[8] = {
+    255,255,255,255,255,255,255,255          };
 
-  eeWrite(8,mooID);
-  eeWrite(0,blankmooID);
+  //i2ceeWrite(0,mooID);
+  i2ceeWrite(0,blankmooID);
+
+  i2ceeRead(0, mooID);
+
+  Serial.println(int(mooID[7]));
+
+  char msg[2];  
+  for(int x;x<7;x++){
+    sprintf(msg, "%02X", mooID[x]);
+    Serial.print(msg);
+  }
+  
+  Serial.println();
+  
+  i2ceeRead(8, mooID);
+
+  Serial.println(int(mooID[7]));
+
+  char msgg[2];  
+  for(int x;x<7;x++){
+    sprintf(msgg, "%02X", mooID[x]);
+    Serial.print(msgg);
+  }
+  
+  Serial.println();
+  
 
   setRGB(0,0,255);
   if (Ethernet.begin(mac) == 0) {
@@ -116,7 +123,7 @@ void setup(){
 bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
 
   if(autoSet){
-
+    Serial.println("autoset true");
     // Search for free location
     bool IDcheck = true;
     bool IDmatch = false;
@@ -143,13 +150,24 @@ bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
 
     // If IDcheck is false x is the last location in the db, else have found a empty spot in the db
     if(!IDcheck){
-      location -= 1;
+      Serial.println("id check is false");
+      Serial.println(x);
+      if (location){
+        location -= 1;
+      }
       byte endID[] = { 
-        225, 225, 255, 255, 255, 255, 255, 255                   };
-      eeWrite(((location+1)*8),addID);
+        255, 255, 255, 255, 255, 255, 255, 255                               };
+      i2ceeWrite(((location+1)*8),endID);
+      //i2ceeWrite(16,endID);
+      delay(10);
     }
   }
-  eeWrite((location*8),addID);
+
+  Serial.println(sizeof(readRFID));
+
+  i2ceeWrite((location*8),addID);
+
+  delay(10);
 }
 
 void loop(){
@@ -189,22 +207,6 @@ void loop(){
         toolOperation(false);
         long previousMillis = 0;
         int ledState = LOW;
-        while(!digitalRead(RFIDsense)){ // Flash led green and wait for card to be removed for revalidation
-          unsigned long currentMillis = millis();
-          if(currentMillis - previousMillis > 200) {
-            previousMillis = currentMillis;
-            ledState = !ledState;
-            if (ledState == LOW){
-              setRGB(255,255,255);
-            }
-            else{
-              setRGB(255,0,255);
-            }
-          }
-        }
-        /*setRGB(0,0,0);
-         while(!digitalRead(RFIDsense)){
-         }*/
       }
       else{ // Card not found on network, solid red led untill card removed
         setRGB(0,255,255);
@@ -241,7 +243,7 @@ void loop(){
 
 bool returnDBID(int offset){
 
-  eeRead((offset*8),returnedDBID);
+  i2ceeRead((offset*8),returnedDBID);
 
   bool ffcheck = false;
   for(int x = 0; x < 8 && !ffcheck; x++){
@@ -251,7 +253,8 @@ bool returnDBID(int offset){
     }
   }
 
-  //Serial.println(offset);
+
+  Serial.println(offset);
 
   return ffcheck;
 }
@@ -337,7 +340,7 @@ bool toolOperation(bool stat){
 int networkCheckCard(){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("GET /");
     client.print(nodeID);
@@ -349,9 +352,9 @@ int networkCheckCard(){
       client.print(msg);
     }
 
-    client.println(" HTTP/1.0");
+    client.println(" HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.println();
 
@@ -362,17 +365,20 @@ int networkCheckCard(){
     int y = 0;
     while(client.available() && y<251) {
       httpResponce[y] = client.read();
+      Serial.print(httpResponce[y]);
       y++;
     }
     client.stop();
     httpResponce[y] = 0;
 
-    Serial.println(httpResponce);
+    //Serial.println(httpResponce);
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
+      Serial.print("card status returned:");
+      Serial.println(r3);
       networkStatus = true;
       if(strstr(r3, "1")){
         return 1;
@@ -400,33 +406,25 @@ int networkCheckCard(){
 bool networkAddCard(){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("POST /");
     client.print(nodeID);
-    client.println("/card/ HTTP/1.0");
-    client.print("Host: ");
-    client.println(hostName);
-    client.println("Accept: text/plain");
-    client.print("Content-Length: ");
-    client.println((int)((readRFID[7]*2)+(supervisorRFID[7]*2)+1));
-    client.println("Content-Type: text/plain");
-    client.println();
-
+    client.println("/card/ HTTP/1.1");
     char msg[2];
     for(int x;x<readRFID[7];x++){
       sprintf(msg, "%02X", readRFID[x]);
       client.print(msg);
     }
-
-    client.print(",");
-
+    client.print("/");
     for(int x;x<supervisorRFID[7];x++){
       sprintf(msg, "%02X", supervisorRFID[x]);
       client.print(msg);
     }
-
-    client.println();
+    client.println(" HTTP/1.1");
+    client.print("Host: ");
+    client.println(acHostName);
+    client.println("Accept: text/plain");
     client.println();
 
     // ADD RESPONCE HANDLING HERE
@@ -442,7 +440,7 @@ bool networkAddCard(){
     httpResponce[y] = 0;
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -468,7 +466,7 @@ bool networkAddCard(){
 bool networkSyncDB(byte syncID[8]){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("GET /");
     client.print(nodeID);
@@ -482,9 +480,9 @@ bool networkSyncDB(byte syncID[8]){
       }
     }
 
-    client.println(" HTTP/1.0");
+    client.println(" HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.println();
 
@@ -502,7 +500,7 @@ bool networkSyncDB(byte syncID[8]){
 
     // TODO
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -528,13 +526,13 @@ bool networkSyncDB(byte syncID[8]){
 bool networkReportToolStatus(bool stat){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
-    client.print("PUT /");
+    client.print("POST /");
     client.print(nodeID);
-    client.println("/status/ HTTP/1.0");
+    client.println("/status/ HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
@@ -557,7 +555,7 @@ bool networkReportToolStatus(bool stat){
     httpResponce[y] = 0;
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -583,13 +581,13 @@ bool networkReportToolStatus(bool stat){
 bool networkCheckToolStatus(){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("GET /");
     client.print(nodeID);
-    client.println("/status/ HTTP/1.0");
+    client.println("/status/ HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.println();
 
@@ -599,26 +597,34 @@ bool networkCheckToolStatus(){
     }
     char httpResponce[250];
     int y = 0;
-    while(client.available() && y<251) {
-      httpResponce[y] = client.read();
-      y++;
+    while(client.connected() && y<251) {
+      if(client.available()){
+        httpResponce[y] = client.read();
+        y++;
+      }
     }
     client.stop();
     httpResponce[y] = 0;
 
+    Serial.println(httpResponce);
+
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
       if(strstr(r3, "1")){
+        Serial.println("1");
         return true;
       }
       else{
+        Serial.println("0");
         return false;
       }
     }
     else{
+      Serial.println("netdown");
+      Serial.println(r2);
       networkStatus = false;
       return false;
     }
@@ -633,30 +639,27 @@ bool networkCheckToolStatus(){
 bool networkReportToolUse(bool stat){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
-    client.print("PUT /");
+    client.print("POST /");
     client.print(nodeID);
-    client.println("/tooluse/ HTTP/1.0");
-    client.print("Host: ");
-    client.println(hostName);
-    client.println("Accept: text/plain");
-    client.print("Content-Length: ");
-    client.println((int)((readRFID[7]*2)+2));
-    //client.println("1");
-    client.println("Content-Type: text/plain");
-    client.println();
-
+    client.print("/tooluse/"); 
     client.print((int)stat);
-    client.print(",");
-
+    client.print("/");
     char msg[2];
     for(int x;x<readRFID[7];x++){
       sprintf(msg, "%02X", readRFID[x]);
       client.print(msg);
-      Serial.print(msg);
+      //Serial.print(msg);
     }
-    Serial.println();
+    client.println(" HTTP/1.1");
+    client.print("Host: ");
+    client.println(acHostName);
+    client.println("Accept: text/plain");
+
+
+
+    //Serial.println();
 
     client.println();
     client.println();
@@ -673,10 +676,10 @@ bool networkReportToolUse(bool stat){
     client.stop();
     httpResponce[y] = 0;
 
-    Serial.println(httpResponce);
+    //Serial.println(httpResponce);
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -702,13 +705,13 @@ bool networkReportToolUse(bool stat){
 bool networkReportToolTime(long timeUsed){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("POST /");
     client.print(nodeID);
-    client.println("/tooluse/time/ HTTP/1.0");
+    client.println("/tooluse/time/ HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.print("Content-Length: ");
     client.println((int)(getLength(timeUsed)+1+(readRFID[7]*2)));
@@ -740,7 +743,7 @@ bool networkReportToolTime(long timeUsed){
     httpResponce[y] = 0;
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -766,13 +769,13 @@ bool networkReportToolTime(long timeUsed){
 bool networkCaseAlert(bool stat){
 
   // Check readRFID with the server
-  if (client.connect(server, 8071)) {
+  if (client.connect(server, serverPort)) {
     // Make a HTTP request:
     client.print("PUT /");
     client.print(nodeID);
-    client.println("/case/ HTTP/1.0");
+    client.println("/case/ HTTP/1.1");
     client.print("Host: ");
-    client.println(hostName);
+    client.println(acHostName);
     client.println("Accept: text/plain");
     client.println("Content-Length: 1");
     client.println("Content-Type: text/plain");
@@ -796,7 +799,7 @@ bool networkCaseAlert(bool stat){
     httpResponce[y] = 0;
 
     char* r1 = httpResponce;
-    char* r2 = strstr(r1, "HTTP/1.0 200 OK");
+    char* r2 = strstr(r1, "HTTP/1.1 200");
     if(r2){
       char* r3 = strstr(r1, "\r\n\r\n")+4;
       networkStatus = true;
@@ -833,13 +836,3 @@ int getLength(long someValue) {
   // return the number of digits:
   return digits;
 }
-
-
-
-
-
-
-
-
-
-
