@@ -41,7 +41,7 @@ byte dbsyncRFID[8];
 byte cardToAddID[8];
 int toolStatusMethod;
 int nodeID = 1;
-char acHostName[] = "acnodeserver";
+char acHostName[] = "babbage";
 bool toolStatusSetting = true;
 bool networkStatus = true;
 
