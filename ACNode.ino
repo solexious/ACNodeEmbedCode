@@ -57,6 +57,8 @@ void setup(){
   pinMode(statusLED[1], OUTPUT);
   pinMode(statusLED[2], OUTPUT);
   pinMode(relayPin, OUTPUT);
+  pinMode(buttonPin,INPUT);
+  digitalWrite(buttonPin, HIGH);
 
   toolStatusSetting = EEPROM.read(100);
 
@@ -173,56 +175,83 @@ bool addCardToDB(bool autoSet, byte addID[8], long location = 0){
 void loop(){
 
   if(getRFID()){ // Read a card at the acnode
-    // Set led to "thinking"
-    setRGB(0,0,255);
-    
-    // If we seem to have a connection to the server, refresh tool status
-    if(networkStatus){
-      updateNetworkToolStatus();
+    if(!digitalRead(buttonPin)){
+      
+      supervisorRFID[0] = readRFID[0];
+      supervisorRFID[1] = readRFID[1];
+      supervisorRFID[2] = readRFID[2];
+      supervisorRFID[3] = readRFID[3];
+      supervisorRFID[4] = readRFID[4];
+      supervisorRFID[5] = readRFID[5];
+      supervisorRFID[6] = readRFID[6];
+      supervisorRFID[7] = readRFID[7];
+      
+      setRGB(0,255,0);
+      
+      while(!digitalRead(RFIDsense)){
+      }
+      
+      while(!getRFID()){
+      }
+      
+      setRGB(0,0,255);
+      
+      networkAddCard();
+      
     }
-    
-    // If we still seem to have a connection to the server, refresh the card status
-    if(networkStatus){
-      refreshNetworkCardDetails();
-    }
-    
-
-    if(checkID()){ // Card is in the database
-      bool clearToUse = true;
-      if(!toolStatusSetting){ // Tool out of service, check if supervisor
-        if(networkCheckCard()!=2){ // Is not a supervisor
-          clearToUse = false;
+    else{
+      // Set led to "thinking"
+      setRGB(0,0,255);
+      
+      // If we seem to have a connection to the server, refresh tool status
+      if(networkStatus){
+        updateNetworkToolStatus();
+      }
+      
+      // If we still seem to have a connection to the server, refresh the card status
+      if(networkStatus){
+        refreshNetworkCardDetails();
+      }
+      
+  
+      if(checkID()){ // Card is in the database
+        bool clearToUse = true;
+        if(!toolStatusSetting){ // Tool out of service, check if supervisor
+          if(networkCheckCard()!=2){ // Is not a supervisor
+            clearToUse = false;
+          }
+        }
+        if(clearToUse){ // Ok to use the device, turn on and log
+          setRGB(255,0,255);
+          toolOperation(true);
+          networkReportToolUse(true);
+          long useTimeStart = millis();
+          while(!digitalRead(RFIDsense)){ // Wait for card to be removed
+          }
+          toolOperation(false);
+          setRGB(0,0,255);
+          networkReportToolUse(false);
+          //networkReportToolTime(millis()-useTimeStart);
+        }
+        else{ // Not ok to use, disable
+          setRGB(0,255,255);
+          toolOperation(false);
+          while(!digitalRead(RFIDsense)){
+          } 
         }
       }
-      if(clearToUse){ // Ok to use the device, turn on and log
-        setRGB(255,0,255);
-        toolOperation(true);
-        networkReportToolUse(true);
-        long useTimeStart = millis();
-        while(!digitalRead(RFIDsense)){ // Wait for card to be removed
+      else{ // Card not in DB, check with the network
+        if(networkCheckCard()){ // Card found add to db
+          addCardToDB(true, readRFID);
+          toolOperation(false);
+          long previousMillis = 0;
+          int ledState = LOW;
         }
-        toolOperation(false);
-        networkReportToolUse(false);
-        //networkReportToolTime(millis()-useTimeStart);
-      }
-      else{ // Not ok to use, disable
-        setRGB(0,255,255);
-        toolOperation(false);
-        while(!digitalRead(RFIDsense)){
-        } 
-      }
-    }
-    else{ // Card not in DB, check with the network
-      if(networkCheckCard()){ // Card found add to db
-        addCardToDB(true, readRFID);
-        toolOperation(false);
-        long previousMillis = 0;
-        int ledState = LOW;
-      }
-      else{ // Card not found on network, solid red led untill card removed
-        setRGB(0,255,255);
-        toolOperation(false);
-        while(!digitalRead(RFIDsense)){
+        else{ // Card not found on network, solid red led untill card removed
+          setRGB(0,255,255);
+          toolOperation(false);
+          while(!digitalRead(RFIDsense)){
+          }
         }
       }
     }
@@ -239,7 +268,7 @@ void loop(){
     setRGB(0,255,255);
   }
 
-  // Check tool status
+  // Check tool status every 60 seconds
   long currentMillis2 = millis();
   if(currentMillis2 - previousMillis2 > 60000) {
     previousMillis2 = currentMillis2;
@@ -441,18 +470,18 @@ bool networkAddCard(){
     // Make a HTTP request:
     client.print("POST /");
     client.print(nodeID);
-    client.println("/card/ HTTP/1.1");
+    client.print("/grant-to-card/");
     char msg[2];
     for(int x;x<readRFID[7];x++){
       sprintf(msg, "%02X", readRFID[x]);
       client.print(msg);
     }
-    client.print("/");
+    client.print("/by-card/");
     for(int x;x<supervisorRFID[7];x++){
       sprintf(msg, "%02X", supervisorRFID[x]);
       client.print(msg);
     }
-    client.println(" HTTP/1.1");
+    client.println("/ HTTP/1.1");
     client.print("Host: ");
     client.println(acHostName);
     client.println("Accept: text/plain");
